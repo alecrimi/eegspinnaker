@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import snntorch as snn
 from snntorch import surrogate
+from imblearn.over_sampling import SMOTE
+import joblib
 
 class SNNModel(nn.Module):
     """Spiking Neural Network compatible with neuromorphic hardware"""
@@ -53,9 +55,11 @@ class NeuromorphicTrainer:
         self.X_path = X_path
         self.y_path = y_path
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
         
     def load_and_preprocess_data(self):
         """Load and preprocess data for SNN"""
+        print("Loading data...")
         X = pd.read_csv(self.X_path)
         y = pd.read_csv(self.y_path)['Condition']
         
@@ -64,23 +68,31 @@ class NeuromorphicTrainer:
         X = X[mask].reset_index(drop=True)
         y = y[mask].reset_index(drop=True)
         
+        print(f"Data shape after filtering: {X.shape}")
+        print(f"Class distribution: {y.value_counts().to_dict()}")
+        
         # Encode labels
         y = (y == 'HC3').astype(int)
         
         # Apply SMOTE
-        from imblearn.over_sampling import SMOTE
+        print("Applying SMOTE...")
         smote = SMOTE(random_state=42)
         X, y = smote.fit_resample(X, y)
+        print(f"Data shape after SMOTE: {X.shape}")
         
         # Normalize
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
-        return torch.tensor(X_scaled, dtype=torch.float32), torch.tensor(y.values, dtype=torch.long)
+        return torch.tensor(X_scaled, dtype=torch.float32), torch.tensor(y.values, dtype=torch.long), scaler
     
     def train_snn(self, num_epochs=100):
         """Train the spiking neural network"""
-        X, y = self.load_and_preprocess_data()
+        X, y, scaler = self.load_and_preprocess_data()
+        
+        # Save scaler for later use
+        joblib.dump(scaler, 'scaler.pkl')
+        print("Saved scaler to scaler.pkl")
         
         # Convert to PyTorch datasets
         dataset = torch.utils.data.TensorDataset(X, y)
@@ -94,10 +106,12 @@ class NeuromorphicTrainer:
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         loss_fn = nn.CrossEntropyLoss()
         
+        print("Starting training...")
         # Training loop
         for epoch in range(num_epochs):
             model.train()
             total_loss = 0
+            batch_count = 0
             
             for batch_X, batch_y in train_loader:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
@@ -115,10 +129,15 @@ class NeuromorphicTrainer:
                 optimizer.step()
                 
                 total_loss += loss.item()
+                batch_count += 1
             
             if epoch % 10 == 0:
                 accuracy = self.evaluate_snn(model, X, y)
-                print(f"Epoch {epoch}, Loss: {total_loss:.4f}, Accuracy: {accuracy:.4f}")
+                avg_loss = total_loss / batch_count if batch_count > 0 else total_loss
+                print(f"Epoch {epoch}, Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
+        
+        final_accuracy = self.evaluate_snn(model, X, y)
+        print(f"Training completed. Final accuracy: {final_accuracy:.4f}")
         
         return model
     
@@ -133,26 +152,35 @@ class NeuromorphicTrainer:
             accuracy = (predictions == y).float().mean()
         return accuracy.item()
 
-    def convert_for_spinnaker(model, input_data):
-        """Convert PyTorch SNN to SpiNNaker-compatible format"""
-        
-        # Extract weights and biases
-        weights = []
-        biases = []
-        
-        for layer in [model.fc1, model.fc2, model.fc3]:
-            weights.append(layer.weight.detach().numpy())
-            biases.append(layer.bias.detach().numpy())
-        
-        # Convert to SpiNNaker population parameters
-        population_params = {
-            'n_neurons': [model.fc1.out_features, model.fc2.out_features, model.fc3.out_features],
-            'weights': weights,
-            'biases': biases,
-            'tau_mem': [model.lif1.beta, model.lif2.beta, model.lif3.beta]  # Membrane time constants
-        }
-        
-        return population_params
+def convert_for_spinnaker(model):
+    """Convert PyTorch SNN to SpiNNaker-compatible format"""
+    print("Converting model for SpiNNaker...")
+    
+    # Extract weights and biases
+    weights = []
+    biases = []
+    
+    for layer in [model.fc1, model.fc2, model.fc3]:
+        weights.append(layer.weight.detach().cpu().numpy())
+        biases.append(layer.bias.detach().cpu().numpy())
+    
+    # Convert to SpiNNaker population parameters
+    population_params = {
+        'n_neurons': [model.fc1.out_features, model.fc2.out_features, model.fc3.out_features],
+        'weights': weights,
+        'biases': biases,
+        'tau_mem': [model.lif1.beta, model.lif2.beta, model.lif3.beta],  # Membrane time constants
+        'input_size': model.fc1.in_features,
+        'output_size': model.fc3.out_features
+    }
+    
+    print(f"Model converted: {population_params['n_neurons']} neurons per layer")
+    return population_params
+
+def save_spinnaker_params(spinnaker_params, filename="spinnaker_model.pkl"):
+    """Save SpiNNaker parameters to file"""
+    joblib.dump(spinnaker_params, filename)
+    print(f"Saved SpiNNaker parameters to {filename}")
 
 # Example usage
 if __name__ == "__main__":
@@ -161,8 +189,12 @@ if __name__ == "__main__":
     trained_snn = neuromorphic_trainer.train_snn(num_epochs=50)
     
     # Convert for SpiNNaker
-    X, y = neuromorphic_trainer.load_and_preprocess_data()
-    spinnaker_params = convert_for_spinnaker(trained_snn, X)
+    spinnaker_params = convert_for_spinnaker(trained_snn)
     
-    print("Model converted to SpiNNaker format")
-    print(f"Layer sizes: {spinnaker_params['n_neurons']}")
+    # Save parameters
+    save_spinnaker_params(spinnaker_params)
+    
+    print("\n" + "="*50)
+    print("Training completed successfully!")
+    print("Next step: Run deploy_snn.py on SpiNNaker hardware/simulator")
+    print("="*50)
