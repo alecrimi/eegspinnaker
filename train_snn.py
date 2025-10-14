@@ -132,3 +132,37 @@ class NeuromorphicTrainer:
             predictions = torch.argmax(output, dim=1)
             accuracy = (predictions == y).float().mean()
         return accuracy.item()
+
+    def convert_for_spinnaker(model, input_data):
+        """Convert PyTorch SNN to SpiNNaker-compatible format"""
+        
+        # Extract weights and biases
+        weights = []
+        biases = []
+        
+        for layer in [model.fc1, model.fc2, model.fc3]:
+            weights.append(layer.weight.detach().numpy())
+            biases.append(layer.bias.detach().numpy())
+        
+        # Convert to SpiNNaker population parameters
+        population_params = {
+            'n_neurons': [model.fc1.out_features, model.fc2.out_features, model.fc3.out_features],
+            'weights': weights,
+            'biases': biases,
+            'tau_mem': [model.lif1.beta, model.lif2.beta, model.lif3.beta]  # Membrane time constants
+        }
+        
+        return population_params
+
+# Example usage
+if __name__ == "__main__":
+    # Train SNN
+    neuromorphic_trainer = NeuromorphicTrainer()
+    trained_snn = neuromorphic_trainer.train_snn(num_epochs=50)
+    
+    # Convert for SpiNNaker
+    X, y = neuromorphic_trainer.load_and_preprocess_data()
+    spinnaker_params = convert_for_spinnaker(trained_snn, X)
+    
+    print("Model converted to SpiNNaker format")
+    print(f"Layer sizes: {spinnaker_params['n_neurons']}")
