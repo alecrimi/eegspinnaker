@@ -4,7 +4,10 @@
 # E/I decay duet to Alzheimer
 # ============================================================
 
+# Change this import to switch from HPC to eBRAINS
 import nest
+# import pyNN.spiNNaker as sim 
+
 import numpy as np
 import matplotlib.pyplot as plt
 
