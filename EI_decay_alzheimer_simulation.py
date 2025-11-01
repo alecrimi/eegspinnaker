@@ -177,10 +177,12 @@ def run_simulation(condition_name, g_ratio, N_total=200, frac_exc=0.8, p_conn=0.
 # Lower g_ratio = less inhibition (AD)
 # Higher g_ratio = more inhibition (healthy)
 conditions = [
-    ("AD", 3.5),   # Reduced inhibition
-    ("HC2", 5.0),  # Medium inhibition
-    ("HC3", 6.5),  # Strong inhibition
+    ("AD", 2.5),   #Very Reduced inhibition
+    ("MCI", 3.5),   #Reduced inhibition 
+    ("HC", 6.5),  # Medium inhibition
+    ("Strong HC", 8.5),  # Strong inhibition
 ]
+ 
 
 all_spectra = []
 
