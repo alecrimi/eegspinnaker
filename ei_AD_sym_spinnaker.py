@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import welch
 import os
-
+#change neurons to 5000 and simtime to 50000
 def run_simulation(condition_name, g_ratio, N_total=1000, frac_exc=0.8, p_conn=0.15, 
                    nu_ext=2.0, sim_time=10000.0, timestep=1.0):  # Increased simulation time
     """
