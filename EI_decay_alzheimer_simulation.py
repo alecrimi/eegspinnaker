@@ -1,7 +1,8 @@
 # ============================================================
 # 
-# PyNEST prototype - Martinez-Cañada et al. 2023 replication
+# PyNEST prototype
 # E/I imbalance in Alzheimer's disease
+# The name variable g_ratio and g_i need to be swapped
 # ============================================================
 
 import nest
