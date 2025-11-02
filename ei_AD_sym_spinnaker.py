@@ -2,6 +2,7 @@
 # PyNN-based simulation for EBRAINS SpiNNaker hardware
 # FIXED VERSION based on error analysis
 # E/I imbalance in Alzheimer's disease
+# The name variable g_ratio and g_i need to be swapped
 # ============================================================
 
 import pyNN.spiNNaker as sim
