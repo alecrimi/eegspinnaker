@@ -1,6 +1,6 @@
 # ============================================================
 # PyNEST prototype  
-# E/I imbalance model  
+# E/I imbalance model  measuring Raw relative power
 # g_ratio = g_I / g_E  (higher -> stronger inhibition)
 # ============================================================
 
