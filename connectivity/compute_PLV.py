@@ -5,8 +5,10 @@ from scipy.signal import hilbert, butter, sosfiltfilt
 
 # --------- CONFIGURATION ---------
 bids_root = "./"  # root folder of your BIDS dataset
-channels_19 = ['Fp1','Fp2','F3','F4','C3','C4','P3','P4','O1','O2',
-               'F7','F8','T7','T8','P7','P8','Fz','Cz','Pz']  # standard 10-20 19 channels
+channels_19 = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4', 'O1', 'O2', 'F7', 'F8', 'T3', 'T4', 'T5', 'T6', 'Fz', 'Cz', 'Pz']  # standard 10-20 19 channels
+
+
+
 
 # Define frequency bands
 BANDS = {
