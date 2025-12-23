@@ -11,7 +11,7 @@ N_PERM = 5000
 ALPHA = 0.01
 
 # Define which bands to analyze
-BANDS = ['theta', 'alpha', 'beta', 'gamma']
+BANDS = ['delta','theta', 'alpha', 'beta', 'gamma']
 
 # ============================================================
 # LOAD DATA FROM BAND-SPECIFIC FOLDERS
