@@ -12,11 +12,11 @@ channels_19 = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'P3', 'P4', 'O1', 'O2', 'F7
 
 # Define frequency bands
 BANDS = {
-    'delta': (0.5,4),
-    'theta': (4, 8),
-    'alpha': (8, 13),
-    'beta': (13, 30),
-    'gamma': (30, 45)
+#    'delta': (0.5,4),
+#    'theta': (4, 8),
+    'alpha': (8, 13)#,
+#    'beta': (13, 30),
+#    'gamma': (30, 45)
 }
 
 # Output folders (at root level)
