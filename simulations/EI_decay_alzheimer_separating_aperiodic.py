@@ -219,33 +219,46 @@ if len(results) >= 2:
 # Plot
 # --------------------
 if results:
-    fig, axes = plt.subplots(2, 1, figsize=(10, 10))
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
-    # Plot 1: Power spectra
-    ax = axes[0]
-    colors = {'AD': 'red', 'MCI': 'orange', 'HC': 'blue'}
+    # Power spectra with new colors
+    colors = {
+        "AD": "#90EE90",
+        "MCI": "#FFD700",
+        "HC": "#A9A9A9",
+    }
+    
     for r in results:
         ax.plot(r["f"], r["Pxx"], label=r["condition"], 
                 linewidth=2.5, color=colors.get(r["condition"], 'gray'))
+                
+    # Add vertical dashed lines for frequency band boundaries
+    # Delta: 0-4 Hz, Theta: 4-8 Hz, Alpha: 8-13 Hz, Beta: 13-30 Hz, Gamma: 30-45 Hz
+    band_boundaries = [4, 8, 13, 30]
+    
+    for boundary in band_boundaries:
+        ax.axvline(x=boundary, color='gray', linestyle='--', linewidth=1.5, alpha=0.6)
+    
+    # Add band labels at the top
+    y_max = ax.get_ylim()[1]
+    band_centers = [(1+4)/2, (4+8)/2, (8+13)/2, (13+30)/2, (30+40)/2]
+    band_names = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']
+    
+    for center, name in zip(band_centers, band_names):
+        if center <= 40:  # Only show labels within x-axis range
+            ax.text(center, y_max * 0.95, name, 
+                   horizontalalignment='center', 
+                   fontsize=10, 
+                   style='italic',
+                   color='gray',
+                   alpha=0.7)            
+                
     ax.set_xlabel("Frequency (Hz)", fontsize=12)
     ax.set_ylabel("Relative power", fontsize=12)
     ax.set_xlim(1, 40)
     ax.grid(alpha=0.3)
     ax.legend(fontsize=11)
     ax.set_title("E/I Balance Effects on EEG Power Spectrum", fontsize=13)
-    
-    # Plot 2: Example LFP traces (first 2 seconds)
-    ax = axes[1]
-    fs = 1000.0
-    for r in results:
-        t = np.arange(len(r['lfp'][:2000])) / fs
-        ax.plot(t, r['lfp'][:2000], label=r["condition"], 
-                linewidth=1, alpha=0.7, color=colors.get(r["condition"], 'gray'))
-    ax.set_xlabel("Time (s)", fontsize=12)
-    ax.set_ylabel("LFP proxy (pA)", fontsize=12)
-    ax.grid(alpha=0.3)
-    ax.legend(fontsize=11)
-    ax.set_title("Example LFP Traces (first 2 seconds)", fontsize=13)
     
     plt.tight_layout()
     plt.savefig("EI_EEG_proxy_corrected.png", dpi=300)
