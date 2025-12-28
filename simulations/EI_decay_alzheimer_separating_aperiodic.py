@@ -1,16 +1,25 @@
 # ============================================================
-# PyNEST – E/I imbalance model (Conductance-based LIF)
+# PyNEST – E/I imbalance model (Conductance-based LIF) - SMOOTH
 # EEG/MEG proxy from synaptic currents
+# Maximum smoothing for publication-quality spectra
 # ============================================================
 import nest
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import welch
+from scipy.signal import welch, savgol_filter
 
-def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
-                   nu_ext=3.0, sim_time=6000.0, warmup=2000.0, seed=42):
+def run_simulation(condition, g_ratio, N_total=1000, frac_exc=0.8, p_conn=0.2,
+                   nu_ext=3.0, sim_time=6000.0, warmup=2000.0, seed=42,
+                   record_fraction=0.15, smooth_spectrum=True):
     """
     Run a simple E/I network with conductance-based neurons and synaptic current LFP proxy.
+    
+    Parameters
+    ----------
+    record_fraction : float
+        Fraction of excitatory neurons to record from (default: 0.15 = 15%)
+    smooth_spectrum : bool
+        Apply additional Savitzky-Golay smoothing to power spectrum (default: True)
     """
     # --------------------
     # NEST kernel setup
@@ -34,7 +43,6 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
     I = nest.Create("iaf_cond_exp", N_I)
     
     # Conductance-based neuron parameters
-    # Standard parameters for cortical neurons
     neuron_params = {
         "C_m": 250.0,          # pF - membrane capacitance
         "g_L": 16.67,          # nS - leak conductance
@@ -61,7 +69,7 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
     g_I = g_ratio * g_E  # nS - inhibitory synaptic conductance
     delay = 1.5
     
-    print(f"\n[{condition}] g_I/g_E = {g_ratio:.2f}, seed = {seed}")
+    print(f"\n[{condition}] N_total={N_total}, g_I/g_E = {g_ratio:.2f}, seed = {seed}")
     print(f"  g_E = {g_E:.2f} nS, g_I = {g_I:.2f} nS")
     
     # --------------------
@@ -80,24 +88,26 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
     
     nest.Connect(E, E, conn, syn_spec={"weight": g_E, "delay": delay})
     nest.Connect(E, I, conn, syn_spec={"weight": g_E, "delay": delay})
-    nest.Connect(I, E, conn, syn_spec={"weight": g_I, "delay": delay})  # Note: positive weight
-    nest.Connect(I, I, conn, syn_spec={"weight": g_I, "delay": delay})  # Conductance is always positive
+    nest.Connect(I, E, conn, syn_spec={"weight": g_I, "delay": delay})
+    nest.Connect(I, I, conn, syn_spec={"weight": g_I, "delay": delay})
     
     # --------------------
-    # Multimeter for synaptic conductances and membrane potential
+    # Multimeter - increased recording for better averaging
     # --------------------
+    n_rec = max(50, int(record_fraction * N_E))  # Minimum 50, or 15% of E neurons
+    n_rec = min(n_rec, N_E)
+    
     mm = nest.Create("multimeter")
     mm.set({
         "interval": 1.0,
-        # For conductance-based neurons, record conductances and V_m
         "record_from": ["g_ex", "g_in", "V_m"]
     })
     
-    n_rec = min(40, N_E)
     nest.Connect(mm, E[:n_rec])
+    print(f"  Recording from {n_rec}/{N_E} excitatory neurons ({100*n_rec/N_E:.1f}%)")
     
     # --------------------
-    # Spike recorder (optional)
+    # Spike recorder
     # --------------------
     spike_rec = nest.Create("spike_recorder")
     nest.Connect(E, spike_rec)
@@ -114,17 +124,16 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
     ev = mm.get("events")
     times = np.array(ev["times"])
     senders = np.array(ev["senders"])
-    g_ex = np.array(ev["g_ex"])  # nS - excitatory conductance
-    g_in = np.array(ev["g_in"])  # nS - inhibitory conductance
-    V_m = np.array(ev["V_m"])    # mV - membrane potential
+    g_ex = np.array(ev["g_ex"])
+    g_in = np.array(ev["g_in"])
+    V_m = np.array(ev["V_m"])
     
-    # Calculate synaptic currents from conductances and driving forces
-    # I_syn = g_syn * (V_m - E_reversal)
-    E_ex = 0.0   # mV - excitatory reversal potential
-    E_in = -80.0 # mV - inhibitory reversal potential
+    # Calculate synaptic currents from conductances
+    E_ex = 0.0
+    E_in = -80.0
     
-    I_ex = g_ex * (V_m - E_ex)  # pA (since g in nS, V in mV)
-    I_in = g_in * (V_m - E_in)  # pA
+    I_ex = g_ex * (V_m - E_ex)
+    I_in = g_in * (V_m - E_in)
     
     # Filter out warmup period
     mask = times > warmup
@@ -142,11 +151,10 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
     
     print(f"  Recording from {n_neurons} neurons over {n_times} time points")
     
-    # NEST records data chronologically: neuron1@t1, neuron2@t1, ..., neuron1@t2, ...
+    # Handle data reshaping
     expected_length = n_times * n_neurons
     if len(times_filtered) != expected_length:
         print(f"  WARNING: Expected {expected_length} points, got {len(times_filtered)}")
-        # Handle missing data by explicit indexing
         I_ex_matrix = np.zeros((n_times, n_neurons))
         I_in_matrix = np.zeros((n_times, n_neurons))
         V_m_matrix = np.zeros((n_times, n_neurons))
@@ -161,14 +169,11 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
             I_in_matrix[t_idx, n_idx] = I_in_filtered[i]
             V_m_matrix[t_idx, n_idx] = V_m_filtered[i]
     else:
-        # Reshape directly - NEST records in blocks per time point
         I_ex_matrix = I_ex_filtered.reshape(n_times, n_neurons)
         I_in_matrix = I_in_filtered.reshape(n_times, n_neurons)
         V_m_matrix = V_m_filtered.reshape(n_times, n_neurons)
     
-    # LFP proxy: average synaptic currents across neurons at each time point
-    # I_syn_ex is inward (negative when V_m < 0), I_syn_in is outward (positive when V_m > -80)
-    # LFP convention: I_ex - I_in (excitatory minus inhibitory currents)
+    # LFP proxy: average synaptic currents across neurons
     lfp = I_ex_matrix.mean(axis=1) - I_in_matrix.mean(axis=1)
     lfp -= lfp.mean()
     
@@ -183,16 +188,40 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
     print(f"  Mean firing rate (E): {firing_rate:.2f} Hz")
     
     # --------------------
-    # Power spectrum
+    # Power spectrum with MAXIMUM smoothing
     # --------------------
     fs = 1000.0
-    nperseg = min(4096, len(lfp) // 4)
-    f, Pxx = welch(lfp, fs=fs, nperseg=nperseg, noverlap=3 * nperseg // 4)
     
+    # Use very large window and maximum overlap for smoothest spectra
+    # For N=1000, we have ~6000ms of data = 6000 samples
+    # Use half of the data as window size for maximum smoothing
+    nperseg = min(len(lfp) // 2, 16384)  # Very large window
+    nperseg = max(nperseg, 4096)          # But at least 4096
+    
+    # Maximum overlap (93.75% = 15/16)
+    noverlap = int(15 * nperseg // 16)
+    
+    f, Pxx = welch(lfp, fs=fs, nperseg=nperseg, noverlap=noverlap, 
+                   window='hann', detrend='constant')
+    
+    # Filter to frequency band of interest
     band = (f >= 1) & (f <= 40)
     f = f[band]
     Pxx = Pxx[band]
-    Pxx /= Pxx.sum()  # relative power
+    
+    # Apply additional Savitzky-Golay smoothing if requested
+    if smooth_spectrum:
+        # Window must be odd and less than data length
+        window_length = min(21, len(Pxx) // 2 * 2 - 1)  # Make it odd
+        if window_length >= 5:  # Need at least 5 points
+            Pxx = savgol_filter(Pxx, window_length=window_length, polyorder=3)
+            print(f"  Applied Savitzky-Golay filter (window={window_length})")
+    
+    # Normalize to relative power
+    Pxx = np.maximum(Pxx, 0)  # Ensure non-negative after filtering
+    Pxx /= Pxx.sum()
+    
+    print(f"  Welch: nperseg={nperseg}, noverlap={noverlap}, freq_res={fs/nperseg:.3f} Hz")
     
     return {
         "condition": condition,
@@ -200,96 +229,94 @@ def run_simulation(condition, g_ratio, N_total=5000, frac_exc=0.8, p_conn=0.2,
         "f": f,
         "Pxx": Pxx,
         "lfp": lfp,
-        "firing_rate": firing_rate
+        "firing_rate": firing_rate,
+        "n_rec": n_rec,
+        "N_E": N_E
     }
 
 
 # ============================================================
 # Main execution
 # ============================================================
-conditions = [
-    ("AD", 2.5, 42),     # Low inhibition - different seed
-    ("MCI", 3.5, 123),   # Medium inhibition - different seed
-    ("HC", 6.5, 456),    # High inhibition - different seed
-]
-
-print("=" * 60)
-print("Running E/I Balance Simulations (Conductance-based)")
-print("=" * 60)
-
-results = []
-for name, g, seed in conditions:
-    res = run_simulation(name, g, seed=seed)
-    if res is not None:
-        results.append(res)
-
-# --------------------
-# Verification: Check that LFPs are different
-# --------------------
-print("\n" + "=" * 60)
-print("LFP Verification (checking first 5 samples):")
-print("=" * 60)
-for i, r in enumerate(results):
-    print(f"{r['condition']:3s}: {r['lfp'][:5]}")
-
-# Check if any two are identical
-if len(results) >= 2:
-    for i in range(len(results)):
-        for j in range(i+1, len(results)):
-            if np.allclose(results[i]['lfp'], results[j]['lfp']):
-                print(f"\n⚠️  WARNING: {results[i]['condition']} and {results[j]['condition']} have identical LFPs!")
-            else:
-                corr = np.corrcoef(results[i]['lfp'], results[j]['lfp'])[0, 1]
-                print(f"✓ {results[i]['condition']} vs {results[j]['condition']}: correlation = {corr:.3f}")
-
-# --------------------
-# Plot
-# --------------------
-if results:
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+if __name__ == "__main__":
+    # Network size to test
+    N_TOTAL = 5000
     
-    # Power spectra with new colors
-    colors = {
-        "AD": "#90EE90",
-        "MCI": "#FFD700",
-        "HC": "#A9A9A9",
-    }
+    conditions = [
+        ("AD", 2.5, 42),
+        ("MCI", 3.5, 123),
+        ("HC", 6.5, 456),
+    ]
     
+    print("=" * 60)
+    print(f"Running E/I Balance Simulations (Maximum Smoothing)")
+    print(f"Network size: {N_TOTAL} neurons")
+    print("=" * 60)
+    
+    results = []
+    for name, g, seed in conditions:
+        res = run_simulation(name, g, N_total=N_TOTAL, seed=seed, 
+                           record_fraction=0.15, smooth_spectrum=True)
+        if res is not None:
+            results.append(res)
+    
+    # --------------------
+    # Verification
+    # --------------------
+    print("\n" + "=" * 60)
+    print("Summary:")
+    print("=" * 60)
     for r in results:
-        ax.plot(r["f"], r["Pxx"], 
-                #label=f"{r['condition']} ({r['firing_rate']:.1f} Hz)", 
-                label=f"{r['condition']}", 
-                linewidth=2.5, 
-                color=colors.get(r["condition"], 'gray'))
+        print(f"{r['condition']:3s}: {r['n_rec']}/{r['N_E']} neurons, "
+              f"FR = {r['firing_rate']:.2f} Hz")
     
-    # Add vertical dashed lines for frequency band boundaries
-    # Delta: 0-4 Hz, Theta: 4-8 Hz, Alpha: 8-13 Hz, Beta: 13-30 Hz, Gamma: 30-45 Hz
-    band_boundaries = [4, 8, 13, 30]
-    for boundary in band_boundaries:
-        ax.axvline(x=boundary, color='gray', linestyle='--', linewidth=1.5, alpha=0.6)
-    
-    # Add band labels at the top
-    y_max = ax.get_ylim()[1]
-    band_centers = [(1+4)/2, (4+8)/2, (8+13)/2, (13+30)/2, (30+40)/2]
-    band_names = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']
-    
-    for center, name in zip(band_centers, band_names):
-        if center <= 40:  # Only show labels within x-axis range
-            ax.text(center, y_max * 0.95, name,
-                   horizontalalignment='center',
-                   fontsize=10, style='italic',
-                   color='gray', alpha=0.7)
-    
-    ax.set_xlabel("Frequency (Hz)", fontsize=12)
-    ax.set_ylabel("Relative power", fontsize=12)
-    ax.set_xlim(1, 40)
-    ax.grid(alpha=0.3)
-    ax.legend(fontsize=11)
-    ax.set_title("E/I Balance Effects on EEG Power Spectrum (Conductance-based LIF)", fontsize=13)
-    
-    plt.tight_layout()
-    plt.savefig("EI_EEG_proxy_conductance.png", dpi=300)
-    print("\n✓ Plot saved as EI_EEG_proxy_conductance.png")
-    plt.show()
-else:
-    print("\n✗ No successful simulations to plot!")
+    # --------------------
+    # Plot
+    # --------------------
+    if results:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+        
+        colors = {
+            "AD": "#90EE90",
+            "MCI": "#FFD700",
+            "HC": "#A9A9A9",
+        }
+        
+        for r in results:
+            ax.plot(r["f"], r["Pxx"], 
+                    label=f"{r['condition']} ({r['firing_rate']:.1f} Hz)", 
+                    linewidth=2.5, 
+                    color=colors.get(r["condition"], 'gray'))
+        
+        # Frequency band boundaries
+        band_boundaries = [4, 8, 13, 30]
+        for boundary in band_boundaries:
+            ax.axvline(x=boundary, color='gray', linestyle='--', 
+                      linewidth=1.5, alpha=0.6)
+        
+        # Band labels
+        y_max = ax.get_ylim()[1]
+        band_centers = [(1+4)/2, (4+8)/2, (8+13)/2, (13+30)/2, (30+40)/2]
+        band_names = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma']
+        
+        for center, name in zip(band_centers, band_names):
+            if center <= 40:
+                ax.text(center, y_max * 0.95, name,
+                       horizontalalignment='center',
+                       fontsize=10, style='italic',
+                       color='gray', alpha=0.7)
+        
+        ax.set_xlabel("Frequency (Hz)", fontsize=12)
+        ax.set_ylabel("Relative power", fontsize=12)
+        ax.set_xlim(1, 40)
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=11)
+        ax.set_title(f"E/I Balance Effects on EEG Power Spectrum (N={N_TOTAL}, Smoothed)", 
+                    fontsize=13)
+        
+        plt.tight_layout()
+        plt.savefig(f"EI_EEG_proxy_conductance_N{N_TOTAL}_smooth.png", dpi=300)
+        print(f"\n✓ Plot saved as EI_EEG_proxy_conductance_N{N_TOTAL}_smooth.png")
+        plt.show()
+    else:
+        print("\n✗ No successful simulations to plot!")
