@@ -53,13 +53,18 @@ pip install sPyNNaker
 
 ### 1. SNN Training
 
-Train the Spiking Neural Network classifier on your EEG features. The script expects data in `data/X_ml.csv` and `data/y_ml.csv`.
+Train the Spiking Neural Network classifier on your **pre-extracted EEG features**.
+
+**Input Data Requirements:**
+- The script expects labeled feature data, **not raw EEG time-series**.
+- **Features (`data/X_ml.csv`)**: A CSV file where each row represents an epoch/window and columns represent extracted features (e.g., spectral power bands, complexity measures, PLV).
+- **Labels (`data/y_ml.csv`)**: A CSV file containing the class labels (e.g., 'AD', 'HC3') corresponding to each row in the feature file.
 
 ```bash
 python train_snn.py
 ```
 This script will:
-- Load and preprocess data (SMOTE oversampling, scaling).
+- Load and preprocess feature data (SMOTE oversampling, scaling).
 - Train an SNN model using `snnTorch`.
 - Save the trained model parameters and scaler.
 - Convert the model for SpiNNaker compatibility.
@@ -84,7 +89,11 @@ python deploy_spinnaker.py
 
 Scripts in `connectivity/` allow you to compute Phase Locking Value (PLV) and perform Network-Based Statistics (NBS).
 
-Example: Compute PLV for EEG data (BIDS format).
+**Input Data Requirements:**
+- These scripts expect **raw or preprocessed EEG data files** in EEGLAB format (`.set`).
+- The data should be organized in a BIDS-like structure (e.g., `sub-001/eeg/sub-001_task-rest_eeg.set`).
+
+Example: Compute PLV for EEG data.
 ```bash
 python connectivity/compute_PLV.py
 ```
