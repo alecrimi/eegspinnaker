@@ -28,6 +28,25 @@ The goal is to link **data-driven classification** with **mechanistic modeling**
 - `validate_on_simulation.py`: Validation of SNN models in simulation before hardware deployment.
 - `deploy_spinnaker.py`: Deployment script for SpiNNaker neuromorphic hardware.
 
+## Project Workflow & Data Requirements
+
+This repository consists of distinct modules with different data needs. **You do not need raw EEG data if you only wish to train the SNN classifier using pre-extracted features.**
+
+1.  **SNN Classification (`classification/`, `train_snn.py`)**:
+    *   **Input**: Pre-extracted features (e.g., spectral power, complexity, PLV) in CSV format.
+    *   **Goal**: Train and validate Spiking Neural Networks to classify AD vs. HC.
+    *   **Neural Data Requirement**: None (if features are already extracted).
+
+2.  **Connectivity Analysis (`connectivity/`)**:
+    *   **Input**: Raw or preprocessed EEG data files (e.g., EEGLAB `.set`).
+    *   **Goal**: Compute functional connectivity matrices (PLV) and perform network statistics.
+    *   **Neural Data Requirement**: Yes, requires EEG recordings.
+
+3.  **Simulations (`simulations/`)**:
+    *   **Input**: Model parameters (E/I ratios) or connectivity matrices.
+    *   **Goal**: Simulate cortical circuit dynamics to model disease progression.
+    *   **Neural Data Requirement**: Optional (can run on synthetic parameters or be informed by connectivity data).
+
 ## Installation
 
 ### Prerequisites
