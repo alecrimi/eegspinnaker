@@ -33,7 +33,10 @@ The goal is to link **data-driven classification** with **mechanistic modeling**
 This repository consists of distinct modules with different data needs. **You do not need raw EEG data if you only wish to train the SNN classifier using pre-extracted features.**
 
 1.  **SNN Classification (`classification/`, `train_snn.py`)**:
-    *   **Input**: Pre-extracted features (e.g., spectral power, complexity, PLV) in CSV format.
+    *   **Input**: Pre-extracted features in CSV format.
+        *   Each row should represent a single epoch (e.g., a 30-second window).
+        *   Columns should contain the extracted features for that epoch.
+        *   **Example Features**: Canonical band powers (delta, theta, alpha, beta, gamma), FOOOF parameters (aperiodic exponent, offset), complexity measures.
     *   **Goal**: Train and validate Spiking Neural Networks to classify AD vs. HC.
     *   **Neural Data Requirement**: None (if features are already extracted).
 
