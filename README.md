@@ -50,6 +50,21 @@ This repository consists of distinct modules with different data needs. **You do
     *   **Goal**: Simulate cortical circuit dynamics to model disease progression.
     *   **Neural Data Requirement**: Optional (can run on synthetic parameters or be informed by connectivity data).
 
+## Step-by-Step Guide
+
+### Scenario A: I have Raw EEG Data (BIDS format)
+1.  **Run Connectivity Analysis**: Use `connectivity/compute_PLV.py` to process your raw `.set` files and generate connectivity matrices.
+2.  **Extract Features**: (Note: Feature extraction scripts for things like FOOOF or bandpower are part of the `classification/` notebooks or your own pipeline).
+3.  **Proceed to Scenario B**.
+
+### Scenario B: I have Pre-Extracted Features (CSV)
+1.  **Train SNN**: Run `python train_snn.py` to train the model on your features. This will save the model weights and parameters.
+2.  **Validate**: Run `python validate_on_simulation.py` to verify the trained SNN in a software simulation.
+3.  **Deploy**: Run `python deploy_spinnaker.py` to run the validated model on SpiNNaker hardware (or the sPyNNaker simulator).
+
+### Scenario C: I want to run mechanistic simulations
+*   Run `python simulations/EI_decay.py` at any time to simulate E/I imbalance effects. This is independent of the SNN training pipeline unless you are using connectivity data to inform the simulation topology.
+
 ## Installation
 
 ### Prerequisites
