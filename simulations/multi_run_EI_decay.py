@@ -15,14 +15,16 @@ from scipy.interpolate import interp1d
 
 
 def run_simulation(condition_name,
-                   g_ratio,
-                   N_total=200,
-                   frac_exc=0.8,
-                   p_conn=0.15,
+                   g_ratio, 
+                   scale_flag,
+                   N_total=5000,
+                   frac_exc=0.8, 
+                   p_conn=0.2, #0.15,
                    nu_ext=5.0,
                    sim_time=5000.0,
                    warmup=1000.0,
-                   seed_base=42):
+                   seed_base=42
+                  ):
     """Run an E/I balanced network simulation with robust analysis."""
 
     # --------------------
@@ -40,6 +42,13 @@ def run_simulation(condition_name,
     # --------------------
     N_E = int(N_total * frac_exc)
     N_I = N_total - N_E
+    
+    # Scaling
+    # Needed when changing from 400 to 5000 or more
+    if scale_flag is True:   
+        K_E_target = 30 # target in-degree for excitatory inputs
+        p_conn = K_E_target / (N_total * frac_exc) #
+ 
 
     E_pop = nest.Create("iaf_cond_exp", N_E)
     I_pop = nest.Create("iaf_cond_exp", N_I)
@@ -57,14 +66,16 @@ def run_simulation(condition_name,
     I_pop.t_ref = 1.0
 
     E_pop.tau_syn_ex = 2.0
-    E_pop.tau_syn_in = 8.0
+    E_pop.tau_syn_in =  4.0 #8.0
     I_pop.tau_syn_ex = 1.0
-    I_pop.tau_syn_in = 4.0
+    I_pop.tau_syn_in =  2.0 # 4.0
 
     # --------------------
     # External Poisson drive (robust, non-negative)
     # --------------------
-    g_E_base = 3.0  # reduced for stability
+    #scale = (200 / N_total)  # normalize relative to N=200 baseline
+    g_E_base = 3 # * scale #g_E_base = 3.0  # reduced for stability
+        
     delay = 1.5
 
     ext_drives = []
@@ -82,7 +93,7 @@ def run_simulation(condition_name,
 
     # Background noise
     noise = nest.Create("poisson_generator")
-    noise.rate = 200.0
+    noise.rate = 200.0 #* (200.0 / N_total)
     nest.Connect(noise, E_pop, syn_spec={"weight": 0.3 * g_E_base, "delay": delay})
     nest.Connect(noise, I_pop, syn_spec={"weight": 0.3 * g_E_base, "delay": delay})
 
@@ -130,6 +141,22 @@ def run_simulation(condition_name,
     # LFP proxy (single neuron, robust)
     # --------------------
     events = mE.get("events")
+    '''
+    t = np.array(events["times"])
+    V_m = np.array(events["V_m"])
+    senders = np.array(events["senders"])
+
+    mask = t > warmup
+    t, V_m, senders = t[mask], V_m[mask], senders[mask]
+
+    t_unique = np.unique(t)
+    lfp = np.array([V_m[t == ti].mean() for ti in t_unique])
+
+    # Now Welch on lfp instead of V_m
+    fs = 1000.0 / mE.interval
+    nperseg = min(4096, len(V_m) // 4)
+    f, Pxx = welch(lfp, fs=fs, nperseg=nperseg, noverlap=3*nperseg//4)
+    '''
     if "times" not in events or len(events["times"]) < 2000:
         return {'success': False}
 
@@ -146,7 +173,8 @@ def run_simulation(condition_name,
     nperseg = min(4096, len(V_m) // 4)
 
     f, Pxx = welch(V_m, fs=fs, nperseg=nperseg, noverlap=3 * nperseg // 4)
-
+    
+    
     band = (f >= 1) & (f <= 40)
     f = f[band]
     Pxx = Pxx[band]
@@ -177,7 +205,7 @@ def run_multiple_simulations(condition_name, g_ratio, n_runs=10, seed_base=42):
         seed = seed_base + run_idx * 1000 + int(10 * g_ratio)
         print(f"    Run {run_idx + 1}/{n_runs} (seed={seed})...", end=" ")
         
-        res = run_simulation(condition_name, g_ratio, seed_base=seed)
+        res = run_simulation(condition_name, g_ratio,scale_flag, seed_base=seed)
         
         if res.get('success', False):
             all_frequencies.append(res['f'])
@@ -232,12 +260,15 @@ def run_multiple_simulations(condition_name, g_ratio, n_runs=10, seed_base=42):
 
 conditions = [
     ("AD", 2.5),   # "Low inhibition"
-    ("MCI", 3.5),  # "Medium inhibition"
+    #("MCI", 3.5),  # "Medium inhibition"
     ("HC", 6.5)    # "High inhibition"
 ]
 
 all_spectra = []
 n_runs_per_condition = 10
+
+scale_flag = False
+
 
 print("Starting simulations")
 print("=" * 60)
@@ -269,13 +300,13 @@ if all_spectra:
                 linewidth=2.5, color=colors[s['condition']], alpha=0.85)[0]
         
         # Add shaded area for standard deviation
-        '''
+         
         ax.fill_between(s['f'], 
                         s['Pxx_mean'] - s['Pxx_std'],
                         s['Pxx_mean'] + s['Pxx_std'],
                         color=colors[s['condition']], 
                         alpha=0.2)
-        '''
+         
     # Add vertical dashed lines for frequency band boundaries
     band_boundaries = [4, 8, 13, 30]
     

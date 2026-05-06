@@ -178,21 +178,20 @@ def run_simulation_with_fc(condition_name,
                              syn_spec={"weight":inter_weight,"delay":delay_inter})
 
 
-    mE = nest.Create("multimeter")
-    mE.set(record_from=["V_m"],interval=1.0)
-
-    targets=None
+    # --------------------------------------------------------
+    # Option A: one multimeter per subnetwork
+    # --------------------------------------------------------
+    multimeters = []
 
     for s in range(N_subnets):
 
-        n=min(5,len(E_populations[s]))
+        mE = nest.Create("multimeter")
+        mE.set(record_from=["V_m"], interval=1.0)
 
-        if targets is None:
-            targets=E_populations[s][:n]
-        else:
-            targets+=E_populations[s][:n]
+        sample = E_populations[s][:20]
+        nest.Connect(mE, sample)
 
-    nest.Connect(mE,targets)
+        multimeters.append(mE)
 
 
     spike_recorders=[]
@@ -225,30 +224,52 @@ def run_simulation_with_fc(condition_name,
         spike_rates.append(rate)
 
 
-    events=mE.get("events")
+    # --------------------------------------------------------
+    # Option A: average V_m within each subnetwork, then
+    # compute per-subnetwork PSD and average across subnetworks
+    # --------------------------------------------------------
+    subnet_psds = []
 
-    if len(events["times"])<2000:
-        return {"success":False}
+    for mE in multimeters:
 
+        events = mE.get("events")
 
-    t=np.array(events["times"])
-    V_m=np.array(events["V_m"])
+        t       = np.array(events["times"])
+        Vm_raw  = np.array(events["V_m"])
+        sender  = np.array(events["senders"])
 
-    mask=t>warmup
-    V_m=V_m[mask]
+        mask = t > warmup
+        t_m, Vm_m, sender_m = t[mask], Vm_raw[mask], sender[mask]
 
-    fs=1000/mE.interval
+        traces = [Vm_m[sender_m == uid] for uid in np.unique(sender_m)]
 
-    nperseg=min(4096,len(V_m)//4)
+        if not traces:
+            continue
 
-    f,Pxx=welch(V_m,fs=fs,nperseg=nperseg,noverlap=3*nperseg//4)
+        min_len = min(len(tr) for tr in traces)
 
-    band=(f>=1)&(f<=40)
+        if min_len < 512:
+            continue
 
-    f=f[band]
-    Pxx=Pxx[band]
+        Vm_avg = np.mean([tr[:min_len] for tr in traces], axis=0)
 
-    Pxx_rel=Pxx/np.sum(Pxx)
+        nperseg = min(2048, len(Vm_avg) // 4)
+
+        if nperseg < 64:
+            continue
+
+        f, Pxx = welch(Vm_avg, fs=1000.0, nperseg=nperseg, noverlap=3*nperseg//4)
+
+        subnet_psds.append(Pxx)
+
+    if not subnet_psds:
+        return {"success": False}
+
+    f_band = (f >= 1) & (f <= 40)
+    f      = f[f_band]
+
+    Pxx_mean = np.mean([p[f_band] for p in subnet_psds], axis=0)
+    Pxx_rel  = Pxx_mean / np.sum(Pxx_mean)
 
     return {
 
@@ -323,8 +344,8 @@ CONDITIONS={
 }
 
 N_SUBNETS=19
-N_SUBNET=21
-N_REPEATS=10
+N_SUBNET=260
+N_REPEATS=1
 
 
 # ============================================================
@@ -332,6 +353,7 @@ N_REPEATS=10
 # ============================================================
 
 stitched_runs={c:[] for c in CONDITIONS}
+f_axes={c:None for c in CONDITIONS}
 
 for repeat in range(N_REPEATS):
 
@@ -374,7 +396,7 @@ for repeat in range(N_REPEATS):
     for condition in stitched:
 
         stitched_runs[condition].append(stitched[condition]["Pxx"])
-        f_axis=stitched[condition]["f"]
+        f_axes[condition]=stitched[condition]["f"]
 
 
 # ============================================================
@@ -385,11 +407,14 @@ stitched_mean_std={}
 
 for condition in stitched_runs:
 
+    if not stitched_runs[condition]:
+        continue
+
     spectra=np.vstack(stitched_runs[condition])
 
     stitched_mean_std[condition]={
 
-        "f":f_axis,
+        "f":f_axes[condition],
         "mean":np.mean(spectra,axis=0),
         "std":np.std(spectra,axis=0)
     }
@@ -433,7 +458,8 @@ for center, name in zip(band_centers, band_names):
             horizontalalignment='center',
             fontsize=9,
             style='italic',
-            alpha=0.8)
+            color='gray',
+            alpha=0.7)
 
 
 plt.tight_layout()
@@ -444,4 +470,3 @@ plt.savefig("stitched_spectrum_mean_std.pdf")
 plt.close()
 
 print("\nSimulation complete")
-
