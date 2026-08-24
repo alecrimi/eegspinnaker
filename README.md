@@ -24,5 +24,4 @@ The goal is to link **data-driven classification** with **mechanistic modeling**
 2. Functional connectivity analysis
 3. Simulations
 4. Other visualizations and utils
-  
-Code outside those folders is working in progress and not necessarily functional
+   
