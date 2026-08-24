@@ -4,7 +4,8 @@
 
 This repository accompanies the paper:
 
-**“Learning Alzheimer's Disease Signatures in EEG: Spiking Networks and E/I Imbalance Simulations”** Mamon, Talanov and Crimi
+**“Linking EEG Functional Connectivity and Excitation–Inhibition Balance to  Biophysical Simulation in Alzheimer's Disease”** Mamon, Talanov and Crimi
+ [📄 Neurocomputing 2026](https://arxiv.org/abs/2602.07010)
 
 The project presents a unified neuromorphic and mechanistic framework for studying Alzheimer’s disease (AD) from resting-state EEG data by combining:
 
