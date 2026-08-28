@@ -5,7 +5,7 @@
 This repository accompanies the paper:
 
 **“Linking EEG Functional Connectivity and Excitation–Inhibition Balance to  Biophysical Simulation in Alzheimer's Disease”** Mamon, Talanov and Crimi
-<a href="https://arxiv.org/abs/2602.07010" target="_blank">
+<a href="https://www.sciencedirect.com/science/article/pii/S0925231226022885" target="_blank">
    📄 Neurocomputing 2026
 </a> 
 
