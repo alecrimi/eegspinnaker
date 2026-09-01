@@ -6,7 +6,7 @@ This repository accompanies the paper:
 
 **“Linking EEG Functional Connectivity and Excitation–Inhibition Balance to  Biophysical Simulation in Alzheimer's Disease”** Mamon, Talanov and Crimi
 <a href="https://www.sciencedirect.com/science/article/pii/S0925231226022885" target="_blank">
-   📄 Neurocomputing 2026
+   📄 Neurocomputing, Volume 705, 7 December 2026, 134890
 </a> 
 
 The project presents a unified neuromorphic and mechanistic framework for studying Alzheimer’s disease (AD) from resting-state EEG data by combining:
